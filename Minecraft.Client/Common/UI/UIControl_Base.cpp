@@ -1,9 +1,8 @@
 #include "stdafx.h"
 #include "UI.h"
 #include "UIControl.h"
-#include "..\..\..\Minecraft.World\StringHelpers.h"
-#include "..\..\..\Minecraft.World\JavaMath.h"
-
+#include "../../../Minecraft.World/StringHelpers.h"
+#include "../../../Minecraft.World/JavaMath.h"
 UIControl_Base::UIControl_Base()
 {
 	m_bLabelChanged = false;
@@ -71,6 +70,11 @@ void UIControl_Base::setLabel(UIString label, bool instant, bool force)
 
 const wchar_t* UIControl_Base::getLabel()
 {
+#if defined(__APPLE__)
+	// On Apple, Iggy is stubbed — GetLabel returns empty.  Just return the
+	// label that was stored by init() / setLabel().
+	return m_label.c_str();
+#else
 	IggyDataValue result;
 	IggyResult out = IggyPlayerCallMethodRS(m_parentScene->getMovie(), &result, getIggyValuePath(), m_funcGetLabel, 0, nullptr);
 
@@ -80,6 +84,7 @@ const wchar_t* UIControl_Base::getLabel()
 	}
 
 	return m_label.c_str();
+#endif
 }
 
 void UIControl_Base::setAllPossibleLabels(int labelCount, wchar_t labels[][256])

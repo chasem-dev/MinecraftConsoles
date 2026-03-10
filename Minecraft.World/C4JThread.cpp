@@ -3,17 +3,15 @@
 
 #include "C4JThread.h"
 #ifdef __PSVITA__
-#include "..\Minecraft.Client\PSVita\PSVitaExtras\ShutdownManager.h"
-#include "..\Minecraft.Client\PSVita\PSVitaExtras\PSVitaTLSStorage.h"
-
+#include "../Minecraft.Client/PSVita/PSVitaExtras/ShutdownManager.h"
+#include "../Minecraft.Client/PSVita/PSVitaExtras/PSVitaTLSStorage.h"
 // AP - this comes from the low level user_malloc.c file used to overide the default memory functions. These must be called when a thread is started/stopped
 extern "C" {
 extern void user_registerthread();
 extern void user_removethread();
 }
 #else
-#include "..\Minecraft.Client\PS3\PS3Extras\ShutdownManager.h"
-
+#include "../Minecraft.Client/PS3/PS3Extras/ShutdownManager.h"
 #endif
 
 std::vector<C4JThread*> C4JThread::ms_threadList;
@@ -394,7 +392,7 @@ DWORD C4JThread::WaitForCompletion( int timeoutMs )
 
 int C4JThread::GetExitCode()
 {
-#if defined  __PS3__ || defined __ORBIS__ || defined __PSVITA__
+#if defined  __PS3__ || defined __ORBIS__ || defined __PSVITA__ || defined __APPLE__
 	return m_exitCode;
 #else
 	DWORD exitcode = 0;

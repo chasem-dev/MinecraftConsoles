@@ -48,6 +48,7 @@
 #ifndef _XBOX
 #include "..\ArchiveFile.h"
 #endif
+#include "../../Minecraft.World/FileInputStream.h"
 #include "..\Minecraft.h"
 #ifdef _XBOX
 #include "..\Xbox\GameConfig\Minecraft.spa.h"
@@ -66,10 +67,68 @@
 #include <save_data_dialog.h>
 #endif
 
-#include "..\Common\Leaderboards\LeaderboardManager.h"
-
+#include "../Common/Leaderboards/LeaderboardManager.h"
 //CMinecraftApp app;
 unsigned int CMinecraftApp::m_uiLastSignInData = 0;
+
+namespace
+{
+File getLooseArchiveFile(const wstring &filename)
+{
+	File directFile(filename);
+	if (directFile.exists())
+	{
+		return directFile;
+	}
+
+	if (filename.find(L'/') != wstring::npos || filename.find(L'\\') != wstring::npos || filename.find(L':') != wstring::npos)
+	{
+		return File();
+	}
+
+	static const wchar_t *searchRoots[] =
+	{
+		L"Common/Media",
+		L"Windows64Media/Media",
+		L"OrbisMedia/Media",
+		L"PS3Media/Media",
+		L"PSVitaMedia/Media",
+		L"DurangoMedia/Media"
+	};
+
+	for (int i = 0; i < (int)(sizeof(searchRoots) / sizeof(searchRoots[0])); ++i)
+	{
+		File mediaRoot(searchRoots[i]);
+		File mediaFile(mediaRoot, filename);
+		if (mediaFile.exists())
+		{
+			return mediaFile;
+		}
+	}
+
+	return File();
+}
+
+byteArray readLooseArchiveFile(const wstring &filename)
+{
+	File looseFile = getLooseArchiveFile(filename);
+	if (!looseFile.exists())
+	{
+		return byteArray();
+	}
+
+	byteArray data((unsigned int)looseFile.length());
+	if (data.length == 0)
+	{
+		return data;
+	}
+
+	FileInputStream input(looseFile);
+	input.read(data);
+	input.close();
+	return data;
+}
+}
 
 const float CMinecraftApp::fSafeZoneX = 64.0f; // 5% of 1280
 const float CMinecraftApp::fSafeZoneY = 36.0f; // 5% of 720
@@ -308,7 +367,34 @@ LPCWSTR CMinecraftApp::GetString(int iID)
 {
 	//return L"Değişiklikler ve Yenilikler";
 	//return L"ÕÕÕÕÖÖÖÖ";
+	static const wchar_t *emptyString = L"";
+	if (app.m_stringTable == NULL)
+	{
+		app.DebugPrintf("CMinecraftApp::GetString called before string table init for id %d\n", iID);
+		return emptyString;
+	}
+
 	return app.m_stringTable->getString(iID);
+}
+
+wstring CMinecraftApp::lookupString(const wstring &id)
+{
+	if (m_stringTable != NULL)
+	{
+		LPCWSTR r = m_stringTable->getString(id);
+		if (r != NULL && r[0] != L'\0') return wstring(r);
+#ifdef __APPLE__
+		DebugPrintf("lookupString: key '%ls' not found in StringTable\n", id.c_str());
+#endif
+	}
+#ifdef __APPLE__
+	else
+	{
+		static bool warned = false;
+		if (!warned) { DebugPrintf("lookupString: m_stringTable is NULL!\n"); warned = true; }
+	}
+#endif
+	return wstring();
 }
 
 void CMinecraftApp::SetAction(int iPad, eXuiAction action, LPVOID param)
@@ -4404,6 +4490,9 @@ void CMinecraftApp::loadMediaArchive()
 	mediapath = L"Common\\Media\\MediaPS3.arc";
 #elif _WINDOWS64
 	mediapath = L"Common\\Media\\MediaWindows64.arc";
+#elif defined(__APPLE__)
+	// The Apple port reuses the Windows64 UI/media archive layout.
+	mediapath = L"Common/Media/MediaWindows64.arc";
 #elif __ORBIS__
 	mediapath = L"Common\\Media\\MediaOrbis.arc";
 #elif _DURANGO
@@ -4467,7 +4556,7 @@ void CMinecraftApp::loadStringTable()
 		delete m_stringTable;
 	}
 	wstring localisationFile = L"languages.loc";
-	if (m_mediaArchive->hasFile(localisationFile))
+	if (m_mediaArchive && m_mediaArchive->hasFile(localisationFile))
 	{
 		byteArray locFile = m_mediaArchive->getFile(localisationFile);
 		m_stringTable = new StringTable(locFile.data, locFile.length);
@@ -4475,9 +4564,18 @@ void CMinecraftApp::loadStringTable()
 	}
 	else
 	{
-		m_stringTable = nullptr;
-		assert(false);
-		// AHHHHHHHHH.
+		byteArray locFile = readLooseArchiveFile(localisationFile);
+		if (locFile.data != NULL && locFile.length > 0)
+		{
+			m_stringTable = new StringTable(locFile.data, locFile.length);
+			delete locFile.data;
+		}
+		else
+		{
+			m_stringTable = nullptr;
+			assert(false);
+			// AHHHHHHHHH.
+		}
 	}
 #endif
 }
@@ -5554,7 +5652,7 @@ void CMinecraftApp::HandleDLC(DLCPack *pack)
 {
 	DWORD dwFilesProcessed = 0;
 #ifndef _XBOX
-#if defined(__PS3__) || defined(__ORBIS__) || defined(_WINDOWS64) || defined (__PSVITA__)
+#if defined(__PS3__) || defined(__ORBIS__) || defined(_WINDOWS64) || defined (__PSVITA__) || defined(__APPLE__)
 	std::vector<std::string> dlcFilenames;
 #elif defined _DURANGO
 	std::vector<std::wstring> dlcFilenames;
@@ -6945,7 +7043,7 @@ HRESULT CMinecraftApp::RegisterConfigValues(WCHAR *pType, int iValue)
 	return hr;
 }
 
-#if (defined _XBOX || defined _WINDOWS64)
+#if (defined _XBOX || defined _WINDOWS64 || defined __APPLE__)
 HRESULT CMinecraftApp::RegisterDLCData(WCHAR *pType, WCHAR *pBannerName, int iGender, uint64_t ullOfferID_Full, uint64_t ullOfferID_Trial, WCHAR *pFirstSkin, unsigned int uiSortIndex, int iConfig, WCHAR *pDataFile)
 {
 	HRESULT hr=S_OK;
@@ -9454,7 +9552,8 @@ int CMinecraftApp::getArchiveFileSize(const wstring &filename)
 	{
 		return tPack->getArchiveFile()->getFileSize(filename);
 	}
-	else return m_mediaArchive->getFileSize(filename);
+	else if (m_mediaArchive) return m_mediaArchive->getFileSize(filename);
+	else return -1;
 }
 
 bool CMinecraftApp::hasArchiveFile(const wstring &filename)
@@ -9463,7 +9562,9 @@ bool CMinecraftApp::hasArchiveFile(const wstring &filename)
 	Minecraft *pMinecraft = Minecraft::GetInstance();
 	if(pMinecraft && pMinecraft->skins) tPack = pMinecraft->skins->getSelected();
 	if(tPack && tPack->hasData() && tPack->getArchiveFile() && tPack->getArchiveFile()->hasFile(filename)) return true;
-	else return m_mediaArchive->hasFile(filename);
+	else if (m_mediaArchive && m_mediaArchive->hasFile(filename)) return true;
+	else if (getLooseArchiveFile(filename).exists()) return true;
+	else return false;
 }
 
 byteArray CMinecraftApp::getArchiveFile(const wstring &filename)
@@ -9475,7 +9576,8 @@ byteArray CMinecraftApp::getArchiveFile(const wstring &filename)
 	{
 		return tPack->getArchiveFile()->getFile(filename);
 	}
-	else return m_mediaArchive->getFile(filename);
+	else if (m_mediaArchive && m_mediaArchive->hasFile(filename)) return m_mediaArchive->getFile(filename);
+	else return readLooseArchiveFile(filename);
 }
 
 // DLC
@@ -10174,11 +10276,19 @@ wstring CMinecraftApp::getRootPath(DWORD packId, bool allowOverride, bool bAddDa
 
 	if(bAddDataFolder)
 	{
+#ifdef __APPLE__
+		return path + L"/Data/";
+#else
 		return path + L"\\Data\\";
+#endif
 	}
 	else
 	{
+#ifdef __APPLE__
+		return path + L"/";
+#else
 		return path + L"\\";
+#endif
 	}
 
 }

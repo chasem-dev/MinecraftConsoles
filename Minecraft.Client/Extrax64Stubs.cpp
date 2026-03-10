@@ -22,6 +22,14 @@
 #include "Windows64\Sentient\DynamicConfigurations.h"
 #include "Windows64\Network\WinsockNetLayer.h"
 #include "Windows64\Windows64_Xuid.h"
+#include "AchievementScreen.h"
+#include "Minecraft.h"
+#elif defined __APPLE__
+#include "Windows64/Sentient/SentientManager.h"
+#include "StatsCounter.h"
+#include "Windows64/Social/SocialManager.h"
+#include "AchievementScreen.h"
+#include "Minecraft.h"
 #elif defined __PSVITA__
 #include "PSVita\Sentient\SentientManager.h"
 #include "StatsCounter.h"
@@ -36,8 +44,26 @@
 #include <perf.h>
 #endif
 
-#if !defined(__PS3__) && !defined(__ORBIS__) && !defined(__PSVITA__)
 #ifdef _WINDOWS64
+#include "discord_game_sdk.h"
+#pragma comment(lib, "discord_game_sdk.dll.lib")
+#elif defined(__APPLE__)
+#include "Windows64/Network/WinsockNetLayer.h"
+#endif
+
+#if defined(__APPLE__)
+// Stub Discord identity variables (no Discord SDK on macOS)
+static char s_discordUsername[32] = "";
+static ULONGLONG s_discordXuid = 0;
+static void InitDiscordIdentity() {}
+void TickDiscord() {}
+#endif
+
+#if !defined(__PS3__) && !defined(__ORBIS__) && !defined(__PSVITA__)
+#ifdef __APPLE__
+C4JStorage StorageManager;
+C_4JProfile ProfileManager;
+#elif defined _WINDOWS64
 //C4JStorage StorageManager;
 C_4JProfile ProfileManager;
 #endif

@@ -808,6 +808,9 @@ void LocalPlayer::awardStat(Stat *stat, byteArray param)
 		// 4J-PB - changed to attempt to award everytime - the award may need a storage device, so needs a primary player, and the player may not have been a primary player when they first 'got' the award
 		// so let the award manager figure it out
 		//if (!minecraft->stats[m_iPad]->hasTaken(ach))
+#ifdef __APPLE__
+        if (!minecraft->stats[m_iPad]->hasTaken(ach))
+#endif
 		{
 			// 4J-PB - Don't display the java popup
 			//minecraft->achievementPopup->popup(ach);
@@ -1233,7 +1236,7 @@ void LocalPlayer::setAndBroadcastCustomCape(DWORD capeId)
 }
 
 // 4J TODO - Remove
-#include "..\Minecraft.World\LevelChunk.h"
+#include "../Minecraft.World/LevelChunk.h"
 void LocalPlayer::mapPlayerChunk(const unsigned int flagTileType)
 {
 	int cx = this->xChunk;

@@ -35,6 +35,9 @@
 #include "Input.h"
 #include "FrustumCuller.h"
 #include "Camera.h"
+#ifdef __APPLE__
+#include "KeyMapping.h"
+#endif
 
 #include "..\Minecraft.World\MobEffect.h"
 #include "..\Minecraft.World\Difficulty.h"
@@ -327,15 +330,35 @@ void Minecraft::init()
 
 	// glClearColor(0.2f, 0.2f, 0.2f, 1);
 
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] init: getWorkingDirectory...\n");
+	workingDirectory = getWorkingDirectory();
+#else
 	workingDirectory = File(L"");//getWorkingDirectory();
+#endif
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] init: McRegionLevelStorageSource...\n");
+#endif
 	levelSource = new McRegionLevelStorageSource(File(workingDirectory, L"saves"));
 	//        levelSource = new MemoryLevelStorageSource();
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] init: Options...\n");
+#endif
 	options = new Options(this, workingDirectory);
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] init: TexturePackRepository...\n");
+#endif
 	skins = new TexturePackRepository(workingDirectory, this);
 	skins->addDebugPacks();
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] init: Textures...\n");
+#endif
 	textures = new Textures(skins, options);
 	//renderLoadingScreen();
 
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] init: Fonts...\n");
+#endif
 	font = new Font(options, L"font/Default.png", textures, false, &DEFAULT_FONT_LOCATION, 23, 20, 8, 8, SFontData::Codepoints);
 	altFont = new Font(options, L"font/alternate.png", textures, false, &ALT_FONT_LOCATION, 16, 16, 8, 8);
 
@@ -351,11 +374,23 @@ void Minecraft::init()
 	//GrassColor::init(textures->loadTexturePixels(L"misc/grasscolor.png"));
 	//FoliageColor::init(textures->loadTexturePixels(L"misc/foliagecolor.png"));
 
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] init: GameRenderer...\n");
+#endif
 	gameRenderer = new GameRenderer(this);
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] init: ItemInHandRenderer...\n");
+#endif
 	EntityRenderDispatcher::instance->itemInHandRenderer = new ItemInHandRenderer(this,false);
 
 	for( int i=0 ; i<4 ; ++i )
 		stats[i] = new StatsCounter();
+
+#ifdef __APPLE__
+	// Load saved stats from profile data on Apple (Windows does this via profile change callback)
+	for( int i=0 ; i<4 ; ++i )
+		stats[i]->parse(ProfileManager.GetGameDefinedProfileData(i));
+#endif
 
 	/*		4J - TODO, 4J-JEV: Unnecessary.
 	Achievements::openInventory->setDescFormatter(nullptr);
@@ -499,6 +534,68 @@ void Minecraft::blit(int x, int y, int sx, int sy, int w, int h)
 LevelStorageSource *Minecraft::getLevelSource()
 {
 	return levelSource;
+}
+
+File Minecraft::getWorkingDirectory()
+{
+	if (workDir.getPath().empty()) workDir = getWorkingDirectory(L"minecraft");
+	return workDir;
+}
+
+File Minecraft::getWorkingDirectory(const wstring& applicationName)
+{
+#ifdef __APPLE__
+	// On macOS, use ~/Library/Application Support/minecraft
+	const char *home = getenv("HOME");
+	if (home)
+	{
+		std::string homePath(home);
+		std::wstring wHome(homePath.begin(), homePath.end());
+		std::wstring appSupport = wHome + L"/Library/Application Support/" + applicationName;
+		File workingDirectory(appSupport);
+		if (!workingDirectory.exists())
+		{
+			workingDirectory.mkdirs();
+		}
+		return workingDirectory;
+	}
+	// Fallback to current directory
+	File workingDirectory(applicationName);
+	return workingDirectory;
+#else
+#if 0
+	// 4J - original version
+	final String userHome = System.getProperty("user.home", ".");
+	final File workingDirectory;
+	switch (getPlatform()) {
+	case linux:
+	case solaris:
+		workingDirectory = new File(userHome, '.' + applicationName + '/');
+		break;
+	case windows:
+		final String applicationData = System.getenv("APPDATA");
+		if (applicationData != null) workingDirectory = new File(applicationData, "." + applicationName + '/');
+		else workingDirectory = new File(userHome, '.' + applicationName + '/');
+		break;
+	case macos:
+		workingDirectory = new File(userHome, "Library/Application Support/" + applicationName);
+		break;
+	default:
+		workingDirectory = new File(userHome, applicationName + '/');
+	}
+	if (!workingDirectory.exists()) if (!workingDirectory.mkdirs()) throw new RuntimeException("The working directory could not be created: " + workingDirectory);
+	return workingDirectory;
+#else
+	wstring userHome = L"home";	// 4J - TODO
+	File workingDirectory(userHome, applicationName);
+	// 4J Removed
+	//if (!workingDirectory.exists())
+	//{
+	//	workingDirectory.mkdirs();
+	//}
+	return workingDirectory;
+#endif
+#endif
 }
 
 void Minecraft::setScreen(Screen *screen)
@@ -1250,6 +1347,7 @@ void Minecraft::run_middle()
 	static bool bAutosaveTimerSet=false;
 	static unsigned int uiAutosaveTimer=0;
 	static int iFirstTimeCountdown=60;
+	static int s_renderStateLogCountdown = 0;
 	if( lastTime == 0 ) lastTime = System::nanoTime();
 	static int frames = 0;
 
@@ -1257,6 +1355,26 @@ void Minecraft::run_middle()
 
 	if(running)
 	{
+		if( app.GetGameStarted() )
+		{
+			if( s_renderStateLogCountdown <= 0 )
+			{
+				fprintf(stderr, "[MCE] render-state gameStarted=1 level=%p player=%p camera=%p gameMode=%p screen=%p local0=%p pending0=%p\n",
+					level,
+					player.get(),
+					cameraTargetPlayer.get(),
+					gameMode,
+					screen,
+					localplayers[0].get(),
+					m_pendingLocalConnections[0]);
+				s_renderStateLogCountdown = 120;
+			}
+			else
+			{
+				--s_renderStateLogCountdown;
+			}
+		}
+
 		if (reloadTextures)
 		{
 			reloadTextures = false;
@@ -1556,6 +1674,57 @@ void Minecraft::run_middle()
 								localplayers[i]->ullButtonsPressed|=1LL<<MINECRAFT_ACTION_SNEAK_TOGGLE;
 						}
 					}
+#elif defined(__APPLE__)
+				if (i == 0)
+				{
+					extern bool AppleKeyboard_IsPressed(int glfwKey);
+					extern bool AppleKeyboard_IsDown(int glfwKey);
+					extern bool AppleMouse_IsGrabbed();
+					extern void AppleMouse_SetGrabbed(bool);
+					enum {
+						GK_ESCAPE = 256, GK_E = 69, GK_Q = 81, GK_F5 = 294,
+						GK_F3 = 292, GK_F4 = 293,
+						GK_MOUSE_LEFT = 500, GK_MOUSE_RIGHT = 501,
+					};
+
+					if (AppleMouse_IsGrabbed())
+					{
+						if (AppleKeyboard_IsPressed(GK_MOUSE_LEFT))
+							localplayers[i]->ullButtonsPressed|=1LL<<MINECRAFT_ACTION_ACTION;
+
+						if (AppleKeyboard_IsPressed(GK_MOUSE_RIGHT))
+							localplayers[i]->ullButtonsPressed|=1LL<<MINECRAFT_ACTION_USE;
+					}
+
+					if (AppleKeyboard_IsPressed(GK_E))
+						localplayers[i]->ullButtonsPressed|=1LL<<MINECRAFT_ACTION_INVENTORY;
+
+					if (AppleKeyboard_IsPressed(GK_Q))
+						localplayers[i]->ullButtonsPressed|=1LL<<MINECRAFT_ACTION_DROP;
+
+					if (AppleKeyboard_IsPressed(GK_ESCAPE))
+					{
+						localplayers[i]->ullButtonsPressed|=1LL<<MINECRAFT_ACTION_PAUSEMENU;
+						app.DebugPrintf("PAUSE PRESSED (Apple keyboard) - ipad = %d\n",i);
+					}
+
+					if (AppleKeyboard_IsPressed(GK_F5))
+						localplayers[i]->ullButtonsPressed|=1LL<<MINECRAFT_ACTION_RENDER_THIRD_PERSON;
+
+					if (AppleKeyboard_IsPressed(GK_F3))
+					{
+						Minecraft::GetInstance()->options->renderDebug = !Minecraft::GetInstance()->options->renderDebug;
+					}
+
+					for (int slot = 0; slot < 9; slot++)
+					{
+						if (AppleKeyboard_IsPressed('1' + slot))
+						{
+							if (localplayers[i]->inventory)
+								localplayers[i]->inventory->selected = slot;
+						}
+					}
+				}
 #endif
 
 #if _DEBUG // ndef _FINAL_BUILD // Disable conflicting debug functionality in release builds
@@ -1840,6 +2009,10 @@ void Minecraft::run_middle()
 				timer->advanceTime();
 			}
 
+#if defined(__APPLE__)
+			extern double g_appleGameTimings[3]; // [0]=ticks [1]=render [2]=lights
+			auto tickStart = System::nanoTime();
+#endif
 			//int64_t beforeTickTime = System::nanoTime();
 			for (int i = 0; i < timer->ticks; i++)
 			{
@@ -1927,6 +2100,16 @@ void Minecraft::run_middle()
 // 				SparseDataStorage::tick();		// 4J added
 			}
 			//int64_t tickDuraction = System::nanoTime() - beforeTickTime;
+#if defined(__APPLE__)
+			auto tickEnd = System::nanoTime();
+			g_appleGameTimings[0] = (double)(tickEnd - tickStart) / 1000000.0;
+			// Log spike frames to console
+			if (g_appleGameTimings[0] > 30.0)
+			{
+				fprintf(stderr, "[SPIKE] Ticks: %.1fms (%d ticks this frame) chunks=%d\n",
+					g_appleGameTimings[0], timer->ticks, Chunk::updates);
+			}
+#endif
 			MemSect(31);
 			checkGlError(L"Pre render");
 			MemSect(0);
@@ -1940,9 +2123,14 @@ void Minecraft::run_middle()
 			PIXEndNamedEvent();
 
 			PIXBeginNamedEvent(0,"Light update");
-
+#if defined(__APPLE__)
+			auto lightsStart = System::nanoTime();
+#endif
+			if (level != NULL) level->updateLights();
 			glEnable(GL_TEXTURE_2D);
-
+#if defined(__APPLE__)
+			g_appleGameTimings[2] = (double)(System::nanoTime() - lightsStart) / 1000000.0;
+#endif
 			PIXEndNamedEvent();
 
 			//        if (!Keyboard::isKeyDown(Keyboard.KEY_F7)) Display.update();		// 4J - removed
@@ -1951,6 +2139,9 @@ void Minecraft::run_middle()
 			//if (player != nullptr && player->isInWall()) options->thirdPersonView = false;
 			if (player != nullptr && player->isInWall()) player->SetThirdPersonView(0);
 
+	#if defined(__APPLE__)
+			auto renderStart = System::nanoTime();
+#endif
 			if (!noRender)
 			{
 				bool bFirst = true;
@@ -2009,6 +2200,34 @@ void Minecraft::run_middle()
 #endif
 			}
 			glFlush();
+#if defined(__APPLE__)
+			g_appleGameTimings[1] = (double)(System::nanoTime() - renderStart) / 1000000.0;
+			if (g_appleGameTimings[1] > 30.0)
+			{
+				fprintf(stderr, "[SPIKE] Render: %.1fms  Lights: %.1fms\n",
+					g_appleGameTimings[1], g_appleGameTimings[2]);
+			}
+			// Periodic stats every 5 seconds
+			{
+				static int frameCount = 0;
+				static double worstTotal = 0, worstTick = 0, worstRender = 0;
+				static auto lastReport = System::nanoTime();
+				double total = g_appleGameTimings[0] + g_appleGameTimings[1];
+				if (total > worstTotal) worstTotal = total;
+				if (g_appleGameTimings[0] > worstTick) worstTick = g_appleGameTimings[0];
+				if (g_appleGameTimings[1] > worstRender) worstRender = g_appleGameTimings[1];
+				frameCount++;
+				auto now = System::nanoTime();
+				if (now - lastReport > 5000000000LL)
+				{
+					extern size_t g_appleProcessRSS;
+					fprintf(stderr, "[PERF] %d frames/5s | worst: total=%.0fms tick=%.0fms render=%.0fms | RSS=%zuMB\n",
+						frameCount, worstTotal, worstTick, worstRender, g_appleProcessRSS/(1024*1024));
+					frameCount = 0; worstTotal = 0; worstTick = 0; worstRender = 0;
+					lastReport = now;
+				}
+			}
+#endif
 
 			/*	4J - removed
 			if (!Display::isActive())
@@ -3587,6 +3806,15 @@ void Minecraft::tick(bool bFirst, bool bUpdateTextures)
 #ifdef _WINDOWS64
 			bool actionPressed = InputManager.ButtonPressed(iPad, MINECRAFT_ACTION_ACTION) || (iPad == 0 && g_KBMInput.IsKBMActive() && g_KBMInput.IsMouseButtonPressed(KeyboardMouseInput::MOUSE_LEFT));
 			bool actionHeld = InputManager.ButtonDown(iPad, MINECRAFT_ACTION_ACTION) || (iPad == 0 && g_KBMInput.IsKBMActive() && g_KBMInput.IsMouseButtonDown(KeyboardMouseInput::MOUSE_LEFT));
+#elif defined(__APPLE__)
+			bool actionHeld = InputManager.ButtonDown(iPad, MINECRAFT_ACTION_ACTION);
+			{
+				extern bool AppleMouse_IsGrabbed();
+				extern bool AppleKeyboard_IsDown(int);
+				if (iPad == 0 && AppleMouse_IsGrabbed() && AppleKeyboard_IsDown(500))
+					actionHeld = true;
+			}
+			bool actionPressed = InputManager.ButtonPressed(iPad, MINECRAFT_ACTION_ACTION);
 #else
 			bool actionPressed = InputManager.ButtonPressed(iPad, MINECRAFT_ACTION_ACTION);
 			bool actionHeld = InputManager.ButtonDown(iPad, MINECRAFT_ACTION_ACTION);
@@ -3620,6 +3848,14 @@ void Minecraft::tick(bool bFirst, bool bUpdateTextures)
 		*/
 #ifdef _WINDOWS64
 		bool useHeld = InputManager.ButtonDown(iPad, MINECRAFT_ACTION_USE) || (iPad == 0 && g_KBMInput.IsKBMActive() && g_KBMInput.IsMouseButtonDown(KeyboardMouseInput::MOUSE_RIGHT));
+#elif defined(__APPLE__)
+		bool useHeld = InputManager.ButtonDown(iPad, MINECRAFT_ACTION_USE);
+		{
+			extern bool AppleMouse_IsGrabbed();
+			extern bool AppleKeyboard_IsDown(int);
+			if (iPad == 0 && AppleMouse_IsGrabbed() && AppleKeyboard_IsDown(501))
+				useHeld = true;
+		}
 #else
 		bool useHeld = InputManager.ButtonDown(iPad, MINECRAFT_ACTION_USE);
 #endif
@@ -4683,7 +4919,13 @@ void Minecraft::startAndConnectTo(const wstring& name, const wstring& sid, const
 	constexpr int logicalH = 720;
 	const int logicalW = logicalH * g_iScreenWidth / g_iScreenHeight;
 
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] Creating Minecraft instance...\n");
+#endif
 	minecraft = new Minecraft(nullptr, nullptr, nullptr, logicalW, logicalH, fullScreen);
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] Minecraft instance created\n");
+#endif
 	/* - 4J - removed
 	{
 	@Override
@@ -4740,7 +4982,13 @@ void Minecraft::startAndConnectTo(const wstring& name, const wstring& sid, const
 	});
 	*/
 	// 4J - TODO - consider whether we need to actually create a thread here
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] Calling minecraft->run()...\n");
+#endif
 	minecraft->run();
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] minecraft->run() returned\n");
+#endif
 }
 
 ClientConnection *Minecraft::getConnection(int iPad)
@@ -4767,12 +5015,33 @@ void Minecraft::main()
 
 	useLomp = true;
 
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] MinecraftWorld_RunStaticCtors...\n");
+#endif
 	MinecraftWorld_RunStaticCtors();
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] EntityRenderDispatcher::staticCtor...\n");
+#endif
 	EntityRenderDispatcher::staticCtor();
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] TileEntityRenderDispatcher::staticCtor...\n");
+#endif
 	TileEntityRenderDispatcher::staticCtor();
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] User::staticCtor...\n");
+#endif
 	User::staticCtor();
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] Tutorial::staticCtor...\n");
+#endif
 	Tutorial::staticCtor();
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] ColourTable::staticCtor...\n");
+#endif
 	ColourTable::staticCtor();
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] app.loadDefaultGameRules...\n");
+#endif
 	app.loadDefaultGameRules();
 
 #ifdef _LARGE_WORLDS
@@ -4814,12 +5083,21 @@ void Minecraft::main()
 	}
 
 	// Common for all platforms
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] IUIScene_CreativeMenu::staticCtor...\n");
+#endif
 	IUIScene_CreativeMenu::staticCtor();
 
 	// On PS4, we call Minecraft::Start from another thread, as this has been timed taking ~2.5 seconds and we need to do some basic
 	// rendering stuff so that we don't break the TRCs on SubmitDone calls
 #ifndef __ORBIS__
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] Minecraft::start...\n");
+#endif
 	Minecraft::start(name, sessionId);
+#endif
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] Minecraft::main() complete\n");
 #endif
 }
 

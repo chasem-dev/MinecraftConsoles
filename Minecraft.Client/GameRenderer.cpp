@@ -141,14 +141,23 @@ GameRenderer::GameRenderer(Minecraft *mc)
 	this->mc = mc;
 	itemInHandRenderer = nullptr;
 
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] GameRenderer: creating ItemInHandRenderers...\n");
+#endif
 	// 4J-PB - set up the local players iteminhand renderers here - needs to be done with lighting enabled so that the render geometry gets compiled correctly
 	glEnable(GL_LIGHTING);
 	mc->localitemInHandRenderers[0] = new ItemInHandRenderer(mc);//itemInHandRenderer;
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] GameRenderer: ItemInHandRenderer[0] done\n");
+#endif
 	mc->localitemInHandRenderers[1] = new ItemInHandRenderer(mc);
 	mc->localitemInHandRenderers[2] = new ItemInHandRenderer(mc);
 	mc->localitemInHandRenderers[3] = new ItemInHandRenderer(mc);
 	glDisable(GL_LIGHTING);
 
+#ifdef __APPLE__
+	fprintf(stderr, "[MCE] GameRenderer: creating light textures...\n");
+#endif
 	// 4J - changes brought forward from 1.8.2
 	BufferedImage *img = new BufferedImage(16, 16, BufferedImage::TYPE_INT_RGB);
 	for( int i = 0; i < NUM_LIGHT_TEXTURES; i++ )
@@ -1117,11 +1126,6 @@ int GameRenderer::getLightTexture(int iPad, Level *level)
 
 void GameRenderer::render(float a, bool bFirst)
 {
-	if (mc->player == nullptr)
-	{
-		return;
-	}
-
 	if( _updateLightTexture && bFirst) updateLightTexture(a);
 	if (Display::isActive())
 	{
@@ -1135,79 +1139,132 @@ void GameRenderer::render(float a, bool bFirst)
 		}
 	}
 
-#if 0	// 4J - TODO
-	if (mc->mouseGrabbed && focused) {
-		mc->mouseHandler.poll();
+	if (mc->noRender) return;
+	GameRenderer::anaglyph3d = mc->options->anaglyph3d;
 
-		float ss = mc->options->sensitivity * 0.6f + 0.2f;
-		float sens = (ss * ss * ss) * 8;
-		float xo = mc->mouseHandler.xd * sens;
-		float yo = mc->mouseHandler.yd * sens;
+	glViewport(0, 0, mc->width, mc->height);
+	ScreenSizeCalculator ssc(mc->options, mc->width, mc->height);
+	int screenWidth = ssc.getWidth();
+	int screenHeight = ssc.getHeight();
+	int xMouse = Mouse::getX() * screenWidth / mc->width;
+	int yMouse = screenHeight - Mouse::getY() * screenHeight / mc->height - 1;
 
-		int yAxis = 1;
-		if (mc->options->invertYMouse) yAxis = -1;
+	int maxFps = getFpsCap(mc->options->framerateLimit);
 
-		if (mc->options->smoothCamera) {
+	// Calculate centered 16:9 HUD viewport
+	const float kHudAspect = 16.0f / 9.0f;
+	float screenAspect = (float)mc->width / (float)mc->height;
+	int hudVpX = 0, hudVpY = 0, hudVpW = mc->width, hudVpH = mc->height;
+	if (screenAspect > kHudAspect)
+	{
+		// Wider than 16:9 - pillarbox
+		hudVpH = mc->height;
+		hudVpW = (int)(mc->height * kHudAspect);
+		hudVpX = (mc->width - hudVpW) / 2;
+		hudVpY = 0;
+	}
+	else if (screenAspect < kHudAspect)
+	{
+		// Taller than 16:9 - letterbox, pinned to bottom
+		hudVpW = mc->width;
+		hudVpH = (int)(mc->width / kHudAspect);
+		hudVpX = 0;
+		hudVpY = 0;
+	}
 
-			xo = smoothTurnX.getNewDeltaValue(xo, .05f * sens);
-			yo = smoothTurnY.getNewDeltaValue(yo, .05f * sens);
+	// Remap mouse into HUD viewport space
+	ScreenSizeCalculator sscHud(mc->options, hudVpW, hudVpH);
+	int hudScreenWidth  = sscHud.getWidth();
+	int hudScreenHeight = sscHud.getHeight();
+	int xMouseHud = (Mouse::getX() - hudVpX) * hudScreenWidth  / hudVpW;
+	int yMouseHud = hudScreenHeight - (Mouse::getY() - hudVpY) * hudScreenHeight / hudVpH - 1;
 
+#if defined(__APPLE__)
+	auto _tRenderLevel = System::nanoTime();
+#endif
+	if (mc->level != NULL)
+	{
+		if (mc->options->framerateLimit == 0)
+		{
+			renderLevel(a, 0);
+		}
+		else
+		{
+			renderLevel(a, lastNsTime + 1000000000 / maxFps);
 		}
 
-		mc->player.turn(xo, yo * yAxis);
-	}
+		lastNsTime = System::nanoTime();
+
+#if defined(__APPLE__)
+		auto _tGui = System::nanoTime();
+#endif
+		if (!mc->options->hideGui || mc->screen != NULL)
+		{
+			// Save real dimensions
+			int savedWidth  = mc->width;
+			int savedHeight = mc->height;
+
+			// Lie to the GUI so ScreenSizeCalculator and setupGuiScreen use HUD size
+			mc->width  = hudVpW;
+			mc->height = hudVpH;
+
+			glViewport(hudVpX, hudVpY, hudVpW, hudVpH);
+			mc->gui->render(a, mc->screen != NULL, xMouseHud, yMouseHud);
+
+			// Restore
+			mc->width  = savedWidth;
+			mc->height = savedHeight;
+			glViewport(0, 0, savedWidth, savedHeight);
+		}
+#if defined(__APPLE__)
+		auto _tGuiEnd = System::nanoTime();
+		auto _tScreen = System::nanoTime();
 #endif
 
-    if (mc->noRender)
-        return;
-    anaglyph3d = mc->options->anaglyph3d;
+		if (mc->screen != NULL)
+		{
+			glClear(GL_DEPTH_BUFFER_BIT);
 
-	glViewport(0, 0, mc->width, mc->height);	// 4J - added (no-op on Win64, viewport set by StateSetViewport)
-	ScreenSizeCalculator ssc(mc->options, mc->width, mc->height);
-	const int screenWidth = ssc.getWidth();
-	const int screenHeight = ssc.getHeight();
-	const int xMouse = Mouse::getX() * screenWidth / mc->width;
-	const int yMouse = screenHeight - Mouse::getY() * screenHeight / mc->height - 1;
+			int savedWidth  = mc->width;
+			int savedHeight = mc->height;
 
-    const int maxFps = getFpsCap(mc->options->framerateLimit);
+			mc->width  = hudVpW;
+			mc->height = hudVpH;
 
-    if (mc->level != nullptr)
-    {
-        if (mc->options->framerateLimit == 0)
-        {
-            renderLevel(a, 0);
-        }
-        else
-        {
-            renderLevel(a, lastNsTime + 1000000000 / maxFps);
-        }
+			glViewport(hudVpX, hudVpY, hudVpW, hudVpH);
+			mc->screen->render(xMouseHud, yMouseHud, a);
+			if (mc->screen != NULL && mc->screen->particles != NULL) mc->screen->particles->render(a);
 
-        lastNsTime = System::nanoTime();
+			mc->width  = savedWidth;
+			mc->height = savedHeight;
+			glViewport(0, 0, savedWidth, savedHeight);
+		}
 
-        if (!mc->options->hideGui || mc->screen != nullptr)
-        {
-            mc->gui->render(a, mc->screen != nullptr, xMouse, yMouse);
-        }
-    }
-    else
-    {
-        glViewport(0, 0, mc->width, mc->height);
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glMatrixMode(GL_MODELVIEW);
-        glLoadIdentity();
-        setupGuiScreen();
+#if defined(__APPLE__)
+		{
+			auto _tEnd = System::nanoTime();
+			double rlevel = (_tGui - _tRenderLevel) / 1000000.0;
+			double gui = (_tGuiEnd - _tGui) / 1000000.0;
+			double screen = (_tEnd - _tScreen) / 1000000.0;
+			if (gui > 5.0 || screen > 5.0)
+			{
+				fprintf(stderr, "[OUTER] renderLevel=%.1f gui=%.1f screen=%.1f total=%.1fms\n",
+					rlevel, gui, screen, rlevel + gui + screen);
+			}
+		}
+#endif
+	}
+	else
+	{
+		glViewport(0, 0, mc->width, mc->height);
+		glMatrixMode(GL_PROJECTION);
+		glLoadIdentity();
+		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
+		setupGuiScreen();
 
-        lastNsTime = System::nanoTime();
-    }
-
-    if (mc->screen != nullptr)
-    {
-        glClear(GL_DEPTH_BUFFER_BIT);
-        mc->screen->render(xMouse, yMouse, a);
-        if (mc->screen != nullptr && mc->screen->particles != nullptr)
-            mc->screen->particles->render(a);
-    }
+		lastNsTime = System::nanoTime();
+	}
 }
 
 void GameRenderer::renderLevel(float a)
@@ -1274,6 +1331,16 @@ int GameRenderer::runUpdate(LPVOID lpParam)
 		}
 
 		m_updateEvents->Set(eUpdateCanRun);
+
+		// Skip update if levelRenderer hasn't been created yet (during init)
+		if (minecraft->levelRenderer == NULL)
+		{
+#ifdef __APPLE__
+			// Yield to avoid spinning while waiting for init to complete
+			usleep(10000);
+#endif
+			continue;
+		}
 
 		//		PIXBeginNamedEvent(0,"Updating dirty chunks %d",(count++)&7);
 
@@ -1367,6 +1434,9 @@ void GameRenderer::renderLevel(float a, int64_t until)
 {
 	//	if (updateLightTexture) updateLightTexture();	// 4J - TODO - Java 1.0.1 has this line enabled, should check why - don't want to put it in now in case it breaks split-screen
 
+#if defined(__APPLE__)
+	auto _tSetup = System::nanoTime();
+#endif
 	glEnable(GL_CULL_FACE);
 	glEnable(GL_DEPTH_TEST);
 
@@ -1379,6 +1449,9 @@ void GameRenderer::renderLevel(float a, int64_t until)
 		mc->cameraTargetPlayer = mc->player;
 	}
 	pick(a);
+#if defined(__APPLE__)
+	auto _tPickEnd = System::nanoTime();
+#endif
 
 	shared_ptr<LivingEntity> cameraEntity = mc->cameraTargetPlayer;
 	LevelRenderer *levelRenderer = mc->levelRenderer;
@@ -1406,12 +1479,18 @@ void GameRenderer::renderLevel(float a, int64_t until)
 		Camera::prepare(mc->player, mc->player->ThirdPersonView() == 2);
 
 		Frustum::getFrustum();
+#if defined(__APPLE__)
+		auto _tSky = System::nanoTime();
+#endif
 		if (mc->options->viewDistance < 2)
 		{
 			setupFog(-1, a);
 			levelRenderer->renderSky(a);
 			if(mc->skins->getSelected()->getId() == 1026 ) levelRenderer->renderHaloRing(a);
 		}
+#if defined(__APPLE__)
+		auto _tSkyEnd = System::nanoTime();
+#endif
 		glEnable(GL_FOG);
 		setupFog(1, a);
 
@@ -1420,6 +1499,10 @@ void GameRenderer::renderLevel(float a, int64_t until)
 			GL11::glShadeModel(GL11::GL_SMOOTH);
 		}
 
+#if defined(__APPLE__)
+		auto _tSetupEnd = System::nanoTime();
+		auto _tCull = System::nanoTime();
+#endif
 		PIXBeginNamedEvent(0,"Culling");
 		MemSect(31);
 		//		Culler *frustum = new FrustumCuller();
@@ -1430,6 +1513,9 @@ void GameRenderer::renderLevel(float a, int64_t until)
 
 		mc->levelRenderer->cull(frustum, a);
 		PIXEndNamedEvent();
+#if defined(__APPLE__)
+		auto _tCullEnd = System::nanoTime();
+#endif
 
 #ifndef MULTITHREAD_ENABLE
 		if ( (i == 0) && updateChunks ) // 4J - added updateChunks condition
@@ -1467,12 +1553,24 @@ void GameRenderer::renderLevel(float a, int64_t until)
 		mc->textures->bindTexture(&TextureAtlas::LOCATION_BLOCKS);	// 4J was L"/terrain.png"
 		MemSect(0);
 		Lighting::turnOff();
+#if defined(__APPLE__)
+		auto _tL0 = System::nanoTime();
+#endif
 		PIXBeginNamedEvent(0,"Level render");
 		levelRenderer->render(cameraEntity, 0, a, updateChunks);
 		PIXEndNamedEvent();
+#if defined(__APPLE__)
+		auto _tL0End = System::nanoTime();
+#endif
 
 		GL11::glShadeModel(GL11::GL_FLAT);
 
+#if defined(__APPLE__)
+		auto _tEnt = System::nanoTime();
+		auto _tEntEnd = _tEnt;
+		auto _tPart = _tEnt;
+		auto _tPartEnd = _tEnt;
+#endif
 		if (cameraFlip == 0 )
 		{
 			Lighting::turnOn();
@@ -1493,6 +1591,10 @@ void GameRenderer::renderLevel(float a, int64_t until)
 			glEnable(GL_ALPHA_TEST);
 #endif
 			PIXEndNamedEvent();
+#if defined(__APPLE__)
+			_tEntEnd = System::nanoTime();
+			_tPart = System::nanoTime();
+#endif
 			PIXBeginNamedEvent(0,"Particle render");
 			turnOnLightLayer(a);		// 4J - brought forward from 1.8.2
 			particleEngine->renderLit(cameraEntity, a, ParticleEngine::OPAQUE_LIST);
@@ -1501,6 +1603,9 @@ void GameRenderer::renderLevel(float a, int64_t until)
 			particleEngine->render(cameraEntity, a, ParticleEngine::OPAQUE_LIST);
 			PIXEndNamedEvent();
 			turnOffLightLayer(a);		// 4J - brought forward from 1.8.2
+#if defined(__APPLE__)
+			_tPartEnd = System::nanoTime();
+#endif
 
 			if ( (mc->hitResult != nullptr) && cameraEntity->isUnderLiquid(Material::water) && cameraEntity->instanceof(eTYPE_PLAYER) ) //&& !mc->options.hideGui)
 			{
@@ -1510,7 +1615,6 @@ void GameRenderer::renderLevel(float a, int64_t until)
 				glEnable(GL_ALPHA_TEST);
 			}
 		}
-
 		glDisable(GL_BLEND);
 		glEnable(GL_CULL_FACE);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -1524,7 +1628,10 @@ void GameRenderer::renderLevel(float a, int64_t until)
 		// 4J - have changed this fancy rendering option to work with our command buffers. The original used to use frame buffer flags to disable
 		// writing to colour when doing the z-only pass, but that value gets obliterated by our command buffers. Using alpha blend function instead
 		// to achieve the same effect.
-		if (true)	// (mc->options->fancyGraphics)
+#if defined(__APPLE__)
+		auto _tL1 = System::nanoTime();
+#endif
+		if (mc->options->fancyGraphics)
 		{
 			if (mc->options->ambientOcclusion)
 			{
@@ -1565,6 +1672,9 @@ void GameRenderer::renderLevel(float a, int64_t until)
 		turnOffLightLayer(a);		// 4J - brought forward from 1.8.2
 		////////////////////////// End of 4J added section
 
+#if defined(__APPLE__)
+		auto _tL1End = System::nanoTime();
+#endif
 		glDepthMask(true);
 		glEnable(GL_CULL_FACE);
 		glDisable(GL_BLEND);
@@ -1587,15 +1697,24 @@ void GameRenderer::renderLevel(float a, int64_t until)
 		glDisable(GL_FOG);
 		*/
 
+#if defined(__APPLE__)
+		auto _tPost = System::nanoTime();
+#endif
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 		levelRenderer->renderDestroyAnimation(Tesselator::getInstance(), dynamic_pointer_cast<Player>(cameraEntity), a);
 		glDisable(GL_BLEND);
 
+#if defined(__APPLE__)
+		auto _tClouds = System::nanoTime();
+#endif
 		if (cameraEntity->y >= Level::genDepth)
 		{
 			prepareAndRenderClouds(levelRenderer, a);
 		}
+#if defined(__APPLE__)
+		auto _tCloudsEnd = System::nanoTime();
+#endif
 
 		// 4J - rain rendering moved here so that it renders after clouds & can blend properly onto them
 		setupFog(0, a);
@@ -1605,13 +1724,46 @@ void GameRenderer::renderLevel(float a, int64_t until)
 		PIXEndNamedEvent();
 		glDisable(GL_FOG);
 
-
+#if defined(__APPLE__)
+		auto _tHand = System::nanoTime();
+#endif
 		if (zoom == 1)
 		{
 			glClear(GL_DEPTH_BUFFER_BIT);
+#if defined(__APPLE__)
+			// MoltenVK's vkCmdClearAttachments may not reliably clear depth
+			// mid-render-pass. Disable depth test so hand always renders on top.
+			glDisable(GL_DEPTH_TEST);
+#endif
 			renderItemInHand(a, i);
+#if defined(__APPLE__)
+			glEnable(GL_DEPTH_TEST);
+#endif
 		}
 
+#if defined(__APPLE__)
+		auto _tHandEnd = System::nanoTime();
+		auto _tPostEnd = _tHandEnd;
+		{
+			double pick = (_tPickEnd - _tSetup) / 1000000.0;
+			double sky = (_tSkyEnd - _tSky) / 1000000.0;
+			double setup = (_tSetupEnd - _tSetup) / 1000000.0;
+			double cull = (_tCullEnd - _tCull) / 1000000.0;
+			double l0 = (_tL0End - _tL0) / 1000000.0;
+			double ent = (_tEntEnd - _tEnt) / 1000000.0;
+			double part = (_tPartEnd - _tPart) / 1000000.0;
+			double l1 = (_tL1End - _tL1) / 1000000.0;
+			double clouds = (_tCloudsEnd - _tClouds) / 1000000.0;
+			double hand = (_tHandEnd - _tHand) / 1000000.0;
+			double post = (_tPostEnd - _tPost) / 1000000.0;
+			double total = setup + cull + l0 + ent + part + l1 + post;
+			if (total > 30.0)
+			{
+				fprintf(stderr, "[RBREAK] pick=%.1f sky=%.1f cam=%.1f cull=%.1f L0=%.1f ent=%.1f part=%.1f L1=%.1f cloud=%.1f hand=%.1f total=%.1fms\n",
+					pick, sky, setup - pick - sky, cull, l0, ent, part, l1, clouds, hand, total);
+			}
+		}
+#endif
 
 		if (!mc->options->anaglyph3d)
 		{

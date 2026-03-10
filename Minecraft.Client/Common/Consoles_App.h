@@ -14,7 +14,9 @@ using namespace std;
 #include "UI\UIStructs.h"
 
 #include "..\..\Minecraft.World\DisconnectPacket.h"
+#ifndef __APPLE__
 #include <xsocialpost.h>
+#endif
 
 #include "..\StringTable.h"
 #include ".\DLC\DLCManager.h"
@@ -156,6 +158,7 @@ public:
 	void			SetSpecialTutorialCompletionFlag(int iPad, int index);
 
 	static			LPCWSTR			GetString(int iID);
+	wstring			lookupString(const wstring &id);
 
 	eGameMode		GetGameMode()																										{ return m_eGameMode;}
 	void			SetGameMode(eGameMode eMode)																						{ m_eGameMode=eMode;}

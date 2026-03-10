@@ -1,5 +1,7 @@
 #include "stdafx.h"
+#ifndef __APPLE__
 #include <xhash>
+#endif
 
 #include "Hasher.h"
 

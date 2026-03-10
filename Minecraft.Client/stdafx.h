@@ -70,7 +70,17 @@ using namespace DirectX;
 #include "PSVitaTypes.h"
 #include "PSVitaStubs.h"
 #include "PSVitaMaths.h"
+#elif defined __APPLE__
+#define AUTO_VAR(_var, _val) auto _var = _val
+#include <stdio.h>
+#include <stdlib.h>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+#include "Apple/AppleStubs.h"
+#define HRESULT_SUCCEEDED(hr) (((HRESULT)(hr)) >= 0)
 #else
+#define AUTO_VAR(_var, _val) auto _var = _val
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -105,7 +115,7 @@ typedef XNKID SessionID;
 typedef XUID GameSessionUID;
 #define HRESULT_SUCCEEDED(hr) (((HRESULT)(hr)) >= 0)
 
-#include "..\Minecraft.Client\xbox\network\extra.h"
+#include "../Minecraft.Client/xbox/network/extra.h"
 #else
 #include "extraX64.h"
 #endif
@@ -178,6 +188,11 @@ typedef XUID GameSessionUID;
 	#include "Windows64\4JLibs\inc\4J_Render.h"
 	#include "Windows64\4JLibs\inc\4J_Storage.h"
 	#include "Windows64\KeyboardMouseInput.h"
+#elif defined __APPLE__
+	#include "Windows64/4JLibs/inc/4J_Input.h"
+	#include "Windows64/4JLibs/inc/4J_Profile.h"
+	#include "Vulkan/4JLibs/inc/4J_Render.h"
+	#include "Windows64/4JLibs/inc/4J_Storage.h"
 #elif defined __PSVITA__
 	#include "PSVita\4JLibs\inc\4J_Input.h"
 	#include "PSVita\4JLibs\inc\4J_Profile.h"
@@ -279,6 +294,18 @@ typedef XUID GameSessionUID;
 	#include "Windows64\Iggy\include\iggy.h"
 	#include "Windows64\Iggy\gdraw\gdraw_d3d11.h"
 	#include "Windows64\Windows64_UIController.h"
+#elif defined __APPLE__
+	#include "Windows64/Sentient/MinecraftTelemetry.h"
+	#include "Windows64Media/strings.h"
+	#include "Windows64/Windows64_App.h"
+	#include "Windows64/Sentient/DynamicConfigurations.h"
+	#include "Windows64/Sentient/SentientTelemetryCommon.h"
+	#include "Windows64/GameConfig/Minecraft.spa.h"
+	#include "Windows64/XML/ATGXmlParser.h"
+	#include "Windows64/Social/SocialManager.h"
+	#include "Common/Audio/SoundEngine.h"
+	#include "Windows64/Iggy/include/iggy.h"
+	#include "Vulkan/Vulkan_UIController.h"
 #elif defined __PSVITA__
 	#include "PSVita\PSVita_App.h"
 	#include "PSVitaMedia\strings.h"		// TODO - create PSVita-specific version of this
@@ -336,6 +363,13 @@ typedef XUID GameSessionUID;
 //#include "Xbox\Xbox_App.h"
 #elif !defined(__PS3__)
 #include "extraX64client.h"
+#endif
+
+#ifdef __APPLE__
+#ifdef NULL
+#undef NULL
+#endif
+#define NULL 0
 #endif
 
 

@@ -1,26 +1,25 @@
 #include "stdafx.h"
 #include "UI.h"
 #include "UIScene_CreateWorldMenu.h"
-#include "..\..\MinecraftServer.h"
-#include "..\..\Minecraft.h"
-#include "..\..\Options.h"
-#include "..\..\TexturePackRepository.h"
-#include "..\..\TexturePack.h"
-#include "..\..\..\Minecraft.World\LevelSettings.h"
-#include "..\..\..\Minecraft.World\StringHelpers.h"
-#include "..\..\..\Minecraft.World\BiomeSource.h"
-#include "..\..\..\Minecraft.World\IntCache.h"
-#include "..\..\..\Minecraft.World\LevelType.h"
-#include "..\..\DLCTexturePack.h"
-
+#include "../../MinecraftServer.h"
+#include "../../Minecraft.h"
+#include "../../Options.h"
+#include "../../TexturePackRepository.h"
+#include "../../TexturePack.h"
+#include "../../../Minecraft.World/LevelSettings.h"
+#include "../../../Minecraft.World/StringHelpers.h"
+#include "../../../Minecraft.World/BiomeSource.h"
+#include "../../../Minecraft.World/IntCache.h"
+#include "../../../Minecraft.World/LevelType.h"
+#include "../../DLCTexturePack.h"
 #ifdef __PSVITA__
-#include "PSVita\Network\SQRNetworkManager_AdHoc_Vita.h"
+#include "PSVita/Network/SQRNetworkManager_AdHoc_Vita.h"
 #endif
 
 #ifdef  _WINDOWS64
 
 #include <windows.h>
-#include "Xbox\Resource.h"
+#include "Xbox/Resource.h"
 #endif
 
 #define GAME_CREATE_ONLINE_TIMER_ID 0
@@ -47,6 +46,8 @@ UIScene_CreateWorldMenu::UIScene_CreateWorldMenu(int iPad, void *initData, UILay
 	m_labelWorldName.init(app.GetString(IDS_WORLD_NAME));
 
 	m_editWorldName.init(m_worldName, eControl_EditWorldName);
+
+	m_editSeed.init(L"", eControl_EditSeed);
 
 	m_buttonGamemode.init(app.GetString(IDS_GAMEMODE_SURVIVAL),eControl_GameModeToggle);
 	m_buttonMoreOptions.init(app.GetString(IDS_MORE_OPTIONS),eControl_MoreOptions);
@@ -81,9 +82,17 @@ UIScene_CreateWorldMenu::UIScene_CreateWorldMenu(int iPad, void *initData, UILay
 	m_MoreOptionsParams.bDoDaylightCycle = true;
 
 	m_bGameModeCreative = false;
+	m_bGameModeSurvival = true;
 	m_iGameModeId = GameType::SURVIVAL->getId();
 	m_pDLCPack = nullptr;
 	m_bRebuildTouchBoxes = false;
+
+#if defined(__APPLE__)
+	// Apple renders this scene with a custom replacement UI, so hide the authored controls
+	// to avoid the native movie widgets bleeding through underneath our custom draw pass.
+	m_controlMainPanel.setVisible(false);
+	m_controlTexturePackPanel.setVisible(false);
+#endif
 
 	m_bMultiplayerAllowed = ProfileManager.IsSignedInLive( m_iPad ) && ProfileManager.AllowedToPlayMultiplayer(m_iPad);
 	// 4J-PB - read the settings for the online flag. We'll only save this setting if the user changed it.
@@ -252,6 +261,36 @@ UIScene_CreateWorldMenu::~UIScene_CreateWorldMenu()
 {
 }
 
+bool UIScene_CreateWorldMenu::appleIsGameModeSurvival() const
+{
+	return m_bGameModeSurvival;
+}
+
+int UIScene_CreateWorldMenu::appleGetDifficulty() const
+{
+	return app.GetGameSettings(m_iPad, eGameSetting_Difficulty);
+}
+
+wstring UIScene_CreateWorldMenu::appleGetDifficultyText() const
+{
+	return app.GetString(m_iDifficultyTitleSettingA[appleGetDifficulty()]);
+}
+
+bool UIScene_CreateWorldMenu::appleIsOnlineGame() const
+{
+	return m_MoreOptionsParams.bOnlineGame;
+}
+
+bool UIScene_CreateWorldMenu::appleIsInviteOnly() const
+{
+	return m_MoreOptionsParams.bInviteOnly;
+}
+
+bool UIScene_CreateWorldMenu::appleAllowsFriendsOfFriends() const
+{
+	return m_MoreOptionsParams.bAllowFriendsOfFriends;
+}
+
 void UIScene_CreateWorldMenu::updateTooltips()
 {
 	ui.SetTooltips( DEFAULT_XUI_MENU_USER, IDS_TOOLTIPS_SELECT,IDS_TOOLTIPS_BACK);
@@ -402,6 +441,83 @@ void UIScene_CreateWorldMenu::handleInput(int iPad, int key, bool repeat, bool p
 	case ACTION_MENU_RIGHT:
 	case ACTION_MENU_OTHER_STICK_UP:
 	case ACTION_MENU_OTHER_STICK_DOWN:
+	#if defined(__APPLE__)
+			if (pressed)
+			{
+				extern int  AppleMouse_GetCreateWorldSelected();
+				extern void AppleMouse_SetCreateWorldSelected(int idx);
+				extern void AppleMouse_SetCreateWorldSurvival(bool val);
+				extern bool AppleMouse_IsOverButton();
+				if (key == ACTION_MENU_OK)
+				{
+					int sel = AppleMouse_GetCreateWorldSelected();
+					if (AppleMouse_IsOverButton())
+					{
+						extern int AppleMouse_GetHoveredControlId();
+						sel = AppleMouse_GetHoveredControlId();
+					}
+					if (sel == 0)
+					{
+						handlePress((F64)eControl_EditWorldName, 0);
+					}
+					else if (sel == 1)
+					{
+						handlePress((F64)eControl_EditSeed, 0);
+					}
+					else if (sel == 2)
+					{
+						handlePress((F64)eControl_GameModeToggle, 0);
+						AppleMouse_SetCreateWorldSurvival(m_bGameModeSurvival);
+					}
+					else if (sel == 3)
+					{
+						int difficulty = appleGetDifficulty();
+						handleSliderMove((F64)eControl_Difficulty, (F64)((difficulty + 1) % 4));
+						ui.PlayUISFX(eSFX_Press);
+					}
+					else if (sel == 4)
+					{
+						handlePress((F64)eControl_MoreOptions, 0);
+					}
+					else if (sel == 5)
+					{
+						handlePress((F64)eControl_NewWorld, 0);
+					}
+				}
+				else if (key == ACTION_MENU_UP || key == ACTION_MENU_DOWN)
+				{
+					int sel = AppleMouse_GetCreateWorldSelected();
+					if (key == ACTION_MENU_UP   && sel > 0) sel--;
+					if (key == ACTION_MENU_DOWN && sel < 5) sel++;
+					AppleMouse_SetCreateWorldSelected(sel);
+					ui.PlayUISFX(eSFX_Press);
+				}
+				else if (key == ACTION_MENU_LEFT || key == ACTION_MENU_RIGHT)
+				{
+					int sel = AppleMouse_GetCreateWorldSelected();
+					if (sel == 2)
+					{
+						handlePress((F64)eControl_GameModeToggle, 0);
+						AppleMouse_SetCreateWorldSurvival(m_bGameModeSurvival);
+						ui.PlayUISFX(eSFX_Press);
+					}
+					else if (sel == 3)
+					{
+						int difficulty = appleGetDifficulty();
+						if (key == ACTION_MENU_LEFT && difficulty > 0)
+						{
+							handleSliderMove((F64)eControl_Difficulty, (F64)(difficulty - 1));
+							ui.PlayUISFX(eSFX_Press);
+						}
+						else if (key == ACTION_MENU_RIGHT && difficulty < 3)
+						{
+							handleSliderMove((F64)eControl_Difficulty, (F64)(difficulty + 1));
+							ui.PlayUISFX(eSFX_Press);
+						}
+					}
+				}
+			}
+#else
 		sendInputToMovie(key, repeat, pressed, released);
 
 		bool bOnlineGame = m_checkboxOnline.IsChecked();
@@ -415,6 +531,8 @@ void UIScene_CreateWorldMenu::handleInput(int iPad, int key, bool repeat, bool p
 				m_MoreOptionsParams.bAllowFriendsOfFriends = false;
 			}
 		}
+
+#endif // __APPLE__
 
 		handled = true;
 		break;
@@ -457,6 +575,27 @@ void UIScene_CreateWorldMenu::handlePress(F64 controlId, F64 childId)
 #endif
 		}
 		break;
+	case eControl_EditSeed:
+		{
+			m_bIgnoreInput=true;
+#ifdef __PS3__
+			int language = XGetLanguage();
+			switch(language)
+			{
+			case XC_LANGUAGE_JAPANESE:
+			case XC_LANGUAGE_KOREAN:
+			case XC_LANGUAGE_TCHINESE:
+				InputManager.RequestKeyboard(app.GetString(IDS_CREATE_NEW_WORLD_SEED),m_editSeed.getLabel(),(DWORD)0,60,&UIScene_CreateWorldMenu::KeyboardCompleteSeedCallback,this,C_4JInput::EKeyboardMode_Default);
+				break;
+			default:
+				InputManager.RequestKeyboard(app.GetString(IDS_CREATE_NEW_WORLD_SEED),m_editSeed.getLabel(),(DWORD)0,60,&UIScene_CreateWorldMenu::KeyboardCompleteSeedCallback,this,C_4JInput::EKeyboardMode_Alphabet_Extended);
+				break;
+			}
+#else
+			InputManager.RequestKeyboard(app.GetString(IDS_CREATE_NEW_WORLD_SEED),m_editSeed.getLabel(),(DWORD)0,60,&UIScene_CreateWorldMenu::KeyboardCompleteSeedCallback,this,C_4JInput::EKeyboardMode_Default);
+#endif
+		}
+		break;
 	case eControl_GameModeToggle:
 		switch(m_iGameModeId)
 		{
@@ -464,16 +603,25 @@ void UIScene_CreateWorldMenu::handlePress(F64 controlId, F64 childId)
 			m_buttonGamemode.setLabel(app.GetString(IDS_GAMEMODE_CREATIVE));
 			m_iGameModeId = GameType::CREATIVE->getId();
 			m_bGameModeCreative = true;
+#if defined(__APPLE__)
+			m_bGameModeSurvival = false;
+#endif
 			break;
 		case 1: // Adventure
 			m_buttonGamemode.setLabel(app.GetString(IDS_GAMEMODE_ADVENTURE));
 			m_iGameModeId = GameType::ADVENTURE->getId();
 			m_bGameModeCreative = false;
+#if defined(__APPLE__)
+			m_bGameModeSurvival = false;
+#endif
 			break;
-		case 2: // Survival 
+		case 2: // Survival
 			m_buttonGamemode.setLabel(app.GetString(IDS_GAMEMODE_SURVIVAL));
 			m_iGameModeId = GameType::SURVIVAL->getId();
 			m_bGameModeCreative = false;
+#if defined(__APPLE__)
+			m_bGameModeSurvival = true;
+#endif
 		};
 		break;
 	case eControl_MoreOptions:
@@ -775,14 +923,46 @@ int UIScene_CreateWorldMenu::KeyboardCompleteWorldNameCallback(LPVOID lpParam,bo
 #else
 		InputManager.GetText(pchText);
 #endif
-
-		if(pchText[0]!=0)
+		wstring text;
+		for (int i = 0; pchText[i] != 0; ++i)
 		{
-			pClass->m_editWorldName.setLabel((wchar_t *)pchText);
-			pClass->m_worldName = (wchar_t *)pchText;
+			text.push_back((wchar_t)pchText[i]);
+		}
+
+		if(!text.empty())
+		{
+			pClass->m_editWorldName.setLabel(text);
+			pClass->m_worldName = text;
 		}
 
 		pClass->m_buttonCreateWorld.setEnable( !pClass->m_worldName.empty() );
+	}
+	return 0;
+}
+
+int UIScene_CreateWorldMenu::KeyboardCompleteSeedCallback(LPVOID lpParam,bool bRes)
+{
+	UIScene_CreateWorldMenu *pClass=(UIScene_CreateWorldMenu *)lpParam;
+	pClass->m_bIgnoreInput=false;
+	// 4J HEG - No reason to set value if keyboard was cancelled
+	if (bRes)
+	{
+#ifdef __PSVITA__
+		//CD - Changed to 2048 [SCE_IME_MAX_TEXT_LENGTH]
+		uint16_t pchText[2048];
+		ZeroMemory(pchText, 2048 * sizeof(uint16_t) );
+#else
+		uint16_t pchText[128];
+		ZeroMemory(pchText, 128 * sizeof(uint16_t) );
+#endif
+		InputManager.GetText(pchText);
+		wstring text;
+		for (int i = 0; pchText[i] != 0; ++i)
+		{
+			text.push_back((wchar_t)pchText[i]);
+		}
+		pClass->m_editSeed.setLabel(text);
+		pClass->m_MoreOptionsParams.seed = text;
 	}
 	return 0;
 }

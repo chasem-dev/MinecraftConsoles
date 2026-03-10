@@ -24,7 +24,7 @@
 #include <DirectXMath.h>
 using namespace DirectX;
 #include <pix.h>
-#include "..\Minecraft.Client\Durango\DurangoExtras\DurangoStubs.h"
+#include "../Minecraft.Client/Durango/DurangoExtras/DurangoStubs.h"
 #endif
 
 #if (defined __PS3__ || defined _XBOX )
@@ -84,6 +84,11 @@ typedef XUID GameSessionUID;
 #include "PSVitaTypes.h"
 #include "PSVitaStubs.h"
 #include "PSVitaMaths.h"
+#elif defined __APPLE__
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+#include "../Minecraft.Client/Apple/AppleStubs.h"
 #else
 #include <unordered_map>
 #include <unordered_set>
@@ -113,7 +118,7 @@ typedef XUID GameSessionUID;
 #ifndef _XBOX
 #include "extraX64.h"
 #else
-#include "..\Minecraft.Client\xbox\network\extra.h"
+#include "../Minecraft.Client/xbox/network/extra.h"
 #endif
 
 #include "Definitions.h"
@@ -162,6 +167,11 @@ void MemSect(int sect);
 #include "..\Minecraft.Client\Windows64\4JLibs\inc\4J_Render.h"
 #include "..\Minecraft.Client\Windows64\4JLibs\inc\4J_Storage.h"
 #include "..\Minecraft.Client\Windows64\4JLibs\inc\4J_Input.h"
+#elif defined __APPLE__
+#include "../Minecraft.Client/Windows64/4JLibs/inc/4J_Profile.h"
+#include "../Minecraft.Client/Vulkan/4JLibs/inc/4J_Render.h"
+#include "../Minecraft.Client/Windows64/4JLibs/inc/4J_Storage.h"
+#include "../Minecraft.Client/Windows64/4JLibs/inc/4J_Input.h"
 #elif defined __PSVITA__
 #include "..\Minecraft.Client\PSVita\4JLibs\inc\4J_Profile.h"
 #include "..\Minecraft.Client\PSVita\4JLibs\inc\4J_Render.h"
@@ -220,6 +230,12 @@ void MemSect(int sect);
 #include "..\Minecraft.Client\Windows64\Sentient\SentientTelemetryCommon.h"
 #include "..\Minecraft.Client\Windows64\Sentient\MinecraftTelemetry.h"
 
+#elif defined __APPLE__
+#include "../Minecraft.Client/Windows64/Windows64_App.h"
+#include "../Minecraft.Client/Windows64Media/strings.h"
+#include "../Minecraft.Client/Windows64/Sentient/SentientTelemetryCommon.h"
+#include "../Minecraft.Client/Windows64/Sentient/MinecraftTelemetry.h"
+
 #elif defined __PSVITA__
 #include "..\Minecraft.Client\PSVita\PSVita_App.h"
 #include "..\Minecraft.Client\PSVitaMedia\strings.h"		// TODO - create PSVita-specific version of this
@@ -239,3 +255,10 @@ void MemSect(int sect);
 #include "..\Minecraft.Client\Common\GameRules\ConsoleGameRulesConstants.h"
 #include "..\Minecraft.Client\Common\GameRules\ConsoleGameRules.h"
 #include "..\Minecraft.Client\Common\Telemetry\TelemetryManager.h"
+
+#ifdef __APPLE__
+#ifdef NULL
+#undef NULL
+#endif
+#define NULL 0
+#endif

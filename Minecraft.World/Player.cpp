@@ -37,10 +37,9 @@
 #include "Player.h"
 #include "ParticleTypes.h"
 
-#include "..\Minecraft.Client\Textures.h"
-
-#include "..\Minecraft.Client\LocalPlayer.h"
-#include "..\Minecraft.Client\HumanoidModel.h"
+#include "../Minecraft.Client/Textures.h"
+#include "../Minecraft.Client/LocalPlayer.h"
+#include "../Minecraft.Client/HumanoidModel.h"
 #include "SoundTypes.h"
 
 
@@ -2713,6 +2712,8 @@ int Player::hash_fnct(const shared_ptr<Player> k)
 	// TODO 4J Stu - Should we just be using the pointers and hashing them?
 #ifdef __PS3__
 	return (int)boost::hash_value( k->name ); // 4J Stu - Names are completely unique?
+#elif defined(__APPLE__)
+	return (int)std::hash<wstring>{}( k->name ); // 4J Stu - Names are completely unique?
 #else
 	return static_cast<int>(std::hash<wstring>{}(k->name)); // 4J Stu - Names are completely unique?
 #endif //__PS3__

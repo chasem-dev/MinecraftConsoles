@@ -8,6 +8,7 @@ private:
 	enum EControls
 	{
 		eControl_EditWorldName,
+		eControl_EditSeed,
 		eControl_TexturePackList,
 		eControl_GameModeToggle,
 		eControl_Difficulty,
@@ -25,7 +26,7 @@ private:
 	UIControl m_controlMainPanel;
 	UIControl_Label m_labelWorldName;
 	UIControl_Button m_buttonGamemode, m_buttonMoreOptions, m_buttonCreateWorld;
-	UIControl_TextInput m_editWorldName;
+	UIControl_TextInput m_editWorldName, m_editSeed;
 	UIControl_Slider m_sliderDifficulty;
 	UIControl_CheckBox m_checkboxOnline;
 
@@ -36,6 +37,7 @@ private:
 		UI_BEGIN_MAP_CHILD_ELEMENTS( m_controlMainPanel )
 			UI_MAP_ELEMENT( m_labelWorldName, "WorldName")
 			UI_MAP_ELEMENT( m_editWorldName, "EditWorldName")
+			UI_MAP_ELEMENT( m_editSeed, "EditSeed")
 			UI_MAP_ELEMENT( m_texturePackList, "TexturePackSelector")
 			UI_MAP_ELEMENT( m_buttonGamemode, "GameModeToggle")
 			UI_MAP_ELEMENT( m_checkboxOnline, "CheckboxOnline")
@@ -47,6 +49,7 @@ private:
 
 	bool m_bGameModeCreative;
 	int m_iGameModeId;
+	bool m_bGameModeSurvival;
 	bool m_bMultiplayerAllowed;
 	DLCPack * m_pDLCPack;
 	bool m_bRebuildTouchBoxes;
@@ -55,6 +58,15 @@ private:
 public:
 	UIScene_CreateWorldMenu(int iPad, void *initData, UILayer *parentLayer);
 	virtual ~UIScene_CreateWorldMenu();
+
+	const wstring &appleGetWorldName() const { return m_worldName; }
+	const wstring &appleGetSeed() const { return m_MoreOptionsParams.seed; }
+	bool appleIsGameModeSurvival() const;
+	int appleGetDifficulty() const;
+	wstring appleGetDifficultyText() const;
+	bool appleIsOnlineGame() const;
+	bool appleIsInviteOnly() const;
+	bool appleAllowsFriendsOfFriends() const;
 
 	virtual void updateTooltips();
 	virtual void updateComponents();
@@ -93,6 +105,7 @@ private:
 
 protected:
 	static int KeyboardCompleteWorldNameCallback(LPVOID lpParam,const bool bRes);
+	static int KeyboardCompleteSeedCallback(LPVOID lpParam,const bool bRes);
 	void handlePress(F64 controlId, F64 childId);
 	void handleSliderMove(F64 sliderId, F64 currentValue);
 	

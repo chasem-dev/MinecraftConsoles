@@ -113,6 +113,12 @@ UIScene_MainMenu::UIScene_MainMenu(int iPad, void *initData, UILayer *parentLaye
 	// Fix for #45154 - Frontend: DLC: Content can only be downloaded from the frontend if you have not joined/exited multiplayer
 	XBackgroundDownloadSetMode(XBACKGROUND_DOWNLOAD_MODE_ALWAYS_ALLOW);
 #endif
+
+	Minecraft *minecraft = Minecraft::GetInstance();
+	if(minecraft != NULL && minecraft->user != NULL)
+	{
+		minecraft->user->name = convStringToWstring( ProfileManager.GetGamertag(ProfileManager.GetPrimaryPad()));
+	}
 }
 
 UIScene_MainMenu::~UIScene_MainMenu()
@@ -267,7 +273,31 @@ void UIScene_MainMenu::handleInput(int iPad, int key, bool repeat, bool pressed,
 		{
 			ProfileManager.SetPrimaryPad(iPad);
 			ProfileManager.SetLockedProfile(-1);
+#if defined(__APPLE__)
+			{
+				// On Apple, Iggy is stubbed — route to handlePress directly.
+				// Use the hovered button if mouse is over one, otherwise use
+				// the keyboard-selected button.
+				extern int  AppleMouse_GetHoveredControlId();
+				extern bool AppleMouse_IsOverButton();
+				extern int  AppleMouse_GetMainMenuSelected();
+				int ctrlId = -1;
+				if (AppleMouse_IsOverButton())
+				{
+					ctrlId = AppleMouse_GetHoveredControlId();
+				}
+				else
+				{
+					// Map keyboard selection index to control IDs
+					static const int selToCtrl[] = { 0, 1, 2, 3, 4, 5 };
+					int sel = AppleMouse_GetMainMenuSelected();
+					if (sel >= 0 && sel < 6) ctrlId = selToCtrl[sel];
+				}
+				if (ctrlId >= 0) handlePress((F64)ctrlId, 0);
+			}
+#else
 			sendInputToMovie(key, repeat, pressed, released);
+#endif
 		}
 		break;
 #ifdef _XBOX_ONE
@@ -281,7 +311,7 @@ void UIScene_MainMenu::handleInput(int iPad, int key, bool repeat, bool pressed,
 #endif
 #ifdef __PSVITA__
 	case ACTION_MENU_X:
-		if(pressed && ProfileManager.IsFullVersion()) 
+		if(pressed && ProfileManager.IsFullVersion())
 		{
 			UINT uiIDA[2];
 			uiIDA[0]=IDS__NETWORK_PSN;
@@ -293,7 +323,20 @@ void UIScene_MainMenu::handleInput(int iPad, int key, bool repeat, bool pressed,
 
 	case ACTION_MENU_UP:
 	case ACTION_MENU_DOWN:
+#if defined(__APPLE__)
+		if (pressed)
+		{
+			extern int  AppleMouse_GetMainMenuSelected();
+			extern void AppleMouse_SetMainMenuSelected(int idx);
+			int sel = AppleMouse_GetMainMenuSelected();
+			if (key == ACTION_MENU_UP   && sel > 0) sel--;
+			if (key == ACTION_MENU_DOWN && sel < 5) sel++;
+			AppleMouse_SetMainMenuSelected(sel);
+			ui.PlayUISFX(eSFX_Press);
+		}
+#else
 		sendInputToMovie(key, repeat, pressed, released);
+#endif
 		break;
 	}
 }
@@ -390,6 +433,16 @@ void UIScene_MainMenu::handlePress(F64 controlId, F64 childId)
 		break;
 #endif
 
+#ifdef _WINDOWS64
+	case eControl_Exit:
+		PostMessage(GetMinecraftWindowHWND(), WM_CLOSE, 0, 0);
+		break;
+#elif defined(__APPLE__)
+	case eControl_Exit:
+		exit(0);
+		break;
+#endif
+
 	default:	__debugbreak();
 	}
 	
@@ -454,6 +507,8 @@ void UIScene_MainMenu::customDraw(IggyCustomDrawCallbackRegion *region)
 {
 	if(wcscmp((wchar_t *)region->name,L"Splash")==0)
 	{
+		static bool loggedOnce = false;
+		if (!loggedOnce) { fprintf(stderr, "[MCE] UIScene_MainMenu::customDrawSplash firing!\n"); loggedOnce = true; }
 		PIXBeginNamedEvent(0,"Custom draw splash");
 		customDrawSplash(region);
 		PIXEndNamedEvent();

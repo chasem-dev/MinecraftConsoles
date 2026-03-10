@@ -114,10 +114,17 @@ void Gui::render(float a, bool mouseFree, int xMouse, int yMouse)
 	{
 	case C4JRender::VIEWPORT_TYPE_FULLSCREEN:
 		// single player
+#if defined(__APPLE__)
+		// No TV overscan on macOS — minimal safezone
+		iSafezoneXHalf = 0;
+		iSafezoneYHalf = 0;
+		iTooltipsYOffset = 40 + splitYOffset;
+#else
 		iSafezoneXHalf = screenWidth/20; // 5%
 		iSafezoneYHalf = screenHeight/20; // 5%
 		iSafezoneTopYHalf = iSafezoneYHalf;
 		iTooltipsYOffset=40+splitYOffset;
+#endif
 		break;
 	case C4JRender::VIEWPORT_TYPE_SPLIT_TOP:
 		iSafezoneXHalf = screenWidth/10; // 5%  (need to treat the whole screen is 2x this screen)
@@ -1044,6 +1051,78 @@ void Gui::render(float a, bool mouseFree, int xMouse, int yMouse)
             drawString(font, line, debugLeft, yPos, 0xffffff);
             yPos += 10;
         }
+
+#if defined(__APPLE__)
+		if (minecraft->options->renderDebug && minecraft->player != nullptr && minecraft->level != nullptr)
+		{
+		// ---- Left side: Vulkan + frame timing breakdown ----
+		int iYPos = yPos + 14;
+		{
+			extern double g_appleFrameTimings[4];
+			extern double g_appleGameTimings[3];
+			auto vkStats = RenderManager.GetVulkanDebugStats();
+
+			drawString(font, L"--- Frame Timing ---", iSafezoneXHalf+2, iYPos, 0x00ff00);
+			iYPos += 10;
+
+			wchar_t buf[256];
+			swprintf(buf, 256, L"Total: %.1fms  Game: %.1fms  UI: %.1fms  Present: %.1fms",
+				g_appleFrameTimings[0], g_appleFrameTimings[1], g_appleFrameTimings[2], g_appleFrameTimings[3]);
+			drawString(font, wstring(buf), iSafezoneXHalf+2, iYPos, 0xe0e0e0);
+			iYPos += 10;
+
+			swprintf(buf, 256, L"  Ticks: %.1fms  Render: %.1fms  Lights: %.1fms",
+				g_appleGameTimings[0], g_appleGameTimings[1], g_appleGameTimings[2]);
+			drawString(font, wstring(buf), iSafezoneXHalf+2, iYPos, 0xe0e0e0);
+			iYPos += 10;
+
+			swprintf(buf, 256, L"VK drawFrame: %.1fms  Fence wait: %.1fms", vkStats.drawFrameMs, vkStats.fenceWaitMs);
+			drawString(font, wstring(buf), iSafezoneXHalf+2, iYPos, 0xe0e0e0);
+			iYPos += 10;
+
+			drawString(font, L"Verts: " + _toString<unsigned int>(vkStats.vertexCount) + L"  Batches: " + _toString<unsigned int>(vkStats.batchCount) + L"  Textures: " + _toString<unsigned int>(vkStats.textureCount), iSafezoneXHalf+2, iYPos, 0xe0e0e0);
+
+			// ---- Right side: GPU, display, memory ----
+			int rX = screenWidth - iSafezoneXHalf - 2;
+			int rY = 20;
+
+			// GPU name
+			wstring gpuStr = L"GPU: ";
+			for (const char *p = vkStats.gpuName; *p; ++p)
+				gpuStr += (wchar_t)*p;
+			drawString(font, gpuStr, rX - font->width(gpuStr), rY, 0xe0e0e0);
+			rY += 10;
+
+			// Display info
+			wstring dispStr = L"Display: " + _toString<unsigned int>(vkStats.swapchainWidth) + L"x" + _toString<unsigned int>(vkStats.swapchainHeight);
+			wstring presentStr = L"  Present: ";
+			for (const char *p = vkStats.presentModeName; *p; ++p)
+				presentStr += (wchar_t)*p;
+			dispStr += presentStr;
+			drawString(font, dispStr, rX - font->width(dispStr), rY, 0xe0e0e0);
+			rY += 10;
+
+			// Swapchain
+			wstring swapStr = L"Swapchain: " + _toString<unsigned int>(vkStats.swapchainImageCount) + L" images";
+			drawString(font, swapStr, rX - font->width(swapStr), rY, 0xe0e0e0);
+			rY += 10;
+
+			// Process memory (RSS)
+			extern size_t g_appleProcessRSS;
+			if (g_appleProcessRSS > 0)
+			{
+				unsigned int rssMB = (unsigned int)(g_appleProcessRSS / (1024 * 1024));
+				wstring memStr = L"Memory: " + _toString<unsigned int>(rssMB) + L" MB";
+				drawString(font, memStr, rX - font->width(memStr), rY, 0xe0e0e0);
+				rY += 10;
+			}
+
+			// Renderer identifier
+			wstring rendStr = L"Vulkan / MoltenVK (macOS)";
+			drawString(font, rendStr, rX - font->width(rendStr), rY, 0xe0e0e0);
+		}
+		}
+#endif
 
         glPopMatrix();
     }

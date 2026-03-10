@@ -187,11 +187,15 @@ wstring AbstractTexturePack::getAnimationString(const wstring &textureName, cons
 {
 	wstring animationDefinitionFile = textureName + L".txt";
 
+#ifdef __APPLE__
+	bool requiresFallback = !hasFile(L"/" + textureName + L".png", false);
+	InputStream *fileStream = getResource(L"/" + path + animationDefinitionFile, requiresFallback);
+#else
 	bool requiresFallback = !hasFile(L"\\" + textureName + L".png", false);
-	
-	wstring result = L"";
-
 	InputStream *fileStream = getResource(L"\\" + path + animationDefinitionFile, requiresFallback);
+#endif
+
+	wstring result = L"";
 
 	if(fileStream)
 	{

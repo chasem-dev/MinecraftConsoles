@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "DefaultTexturePack.h"
 #include "Textures.h"
-#include "..\Minecraft.World\StringHelpers.h"
+#include "../Minecraft.World/StringHelpers.h"
 
 
 DefaultTexturePack::DefaultTexturePack() : AbstractTexturePack(0, nullptr, L"Minecraft", nullptr)
@@ -26,6 +26,13 @@ void DefaultTexturePack::loadIcon()
 	UINT size = 0;
 	HRESULT hr = XuiResourceLoadAllNoLoc(szResourceLocator, &m_iconData, &size);
 	m_iconSize = size;
+#elif defined __APPLE__
+	if(app.hasArchiveFile(L"Graphics/TexturePackIcon.png"))
+	{
+		byteArray ba = app.getArchiveFile(L"Graphics/TexturePackIcon.png");
+		m_iconData = ba.data;
+		m_iconSize = ba.length;
+	}
 #else
 	if(app.hasArchiveFile(L"Graphics\\TexturePackIcon.png"))
 	{
@@ -96,6 +103,8 @@ InputStream *DefaultTexturePack::getResourceImplementation(const wstring &name)/
 	wDrive = wstr + L"Common\\res\\TitleUpdate\\res";
 	*/
 	wDrive = L"Common\\res\\TitleUpdate\\res";
+#elif defined __APPLE__
+	wDrive = L"Common/res/TitleUpdate/res";
 #else
 	wDrive = L"Common\\res\\TitleUpdate\\res";
 

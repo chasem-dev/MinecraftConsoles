@@ -200,6 +200,8 @@ private:
 
 public:
 	LevelStorageSource *getLevelSource();
+	static File getWorkingDirectory();
+	static File getWorkingDirectory(const wstring& applicationName);
 	void setScreen(Screen *screen);
 private:
 	void checkGlError(const wstring& string);

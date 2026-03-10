@@ -14,6 +14,9 @@
 // 4J Stu - Temp define to get Miles to link, can likely be removed when we get a new version of Miles
 #define _SEKRIT
 #include "..\..\Durango\Miles\include\mss.h"
+#elif defined __APPLE__
+// The shared console sound interface does not require Miles declarations here.
+// Keep the Apple startup probe decoupled from the platform audio backend for now.
 #elif defined _WINDOWS64
 #else // PS4
 // 4J Stu - Temp define to get Miles to link, can likely be removed when we get a new version of Miles

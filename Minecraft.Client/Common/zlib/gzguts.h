@@ -42,6 +42,10 @@
 #endif
 #include <fcntl.h>
 
+#ifdef __APPLE__
+#  include <unistd.h>
+#endif
+
 #ifdef _WIN32
 #  include <stddef.h>
 #endif
